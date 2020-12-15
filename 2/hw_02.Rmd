@@ -1,0 +1,200 @@
+---
+title: "Stat4DS / Homework 02"
+author: "Leandro Bernardino Gentili (1527999)"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+linkcolor: cyan
+header-includes:
+- \usepackage{bbold}
+- \usepackage{framed, color}
+- \usepackage{xcolor}
+- \usepackage{graphicx}
+- \usepackage{amsmath}
+- \usepackage{amssymb}
+- \usepackage{amsthm}
+- \usepackage{mathrsfs}
+- \usepackage{mdframed}
+- \usepackage{enumitem}
+- \definecolor{shadecolor}{rgb}{0.89,0.8,1}
+- \newcommand{\Exp}{\mathbb{E}}
+- \newcommand{\Var}{\mathbb{V}\mathrm{ar}}
+- \newcommand{\Cov}{\mathbb{C}\mathrm{ov}}
+- \newcommand{\blue}{\textcolor{blue}}
+- \newcommand{\darkgreen}{\textcolor[rgb]{0,.5,0}}
+- \newcommand{\gray}{\textcolor[rgb]{.3,.3,.3}}
+- \newcommand{\blueA}{\textcolor[rgb]{0,.1,.4}}
+- \newcommand{\blueB}{\textcolor[rgb]{0,.3,.6}}
+- \newcommand{\blueC}{\textcolor[rgb]{0,.5,.8}}
+- \newcommand{\evidenzia}{\textcolor[rgb]{0,0,0}}
+- \newcommand{\nero}{\textcolor[rgb]{0,0,0}}
+- \newcommand{\darkyel}{\textcolor[rgb]{.4,.4,0}}
+- \newcommand{\darkred}{\textcolor[rgb]{.6,0,0}}
+- \newcommand{\blueDek}{\textcolor[rgb]{0.6000000, 0.7490196, 0.9019608}}
+- \newcommand{\purpLarry}{\textcolor[rgb]{0.6901961, 0.2431373, 0.4784314}}
+- \newcommand{\bfun}{\left\{\begin{array}{ll}}
+- \newcommand{\efun}{\end{array}\right.}
+- \newcommand{\Vspace}{\mathbb{V}}
+- \newcommand{\Rdue}{\mathbb{R}^2}
+- \newcommand{\Rtre}{\mathbb{R}^3}
+- \newcommand{\Rd}{\mathbb{R}^d}
+- \newcommand{\vv}{\boldsymbol{v}}
+- \newcommand{\ww}{\boldsymbol{w}}
+- \newcommand{\xx}{\boldsymbol{x}}
+- \newcommand{\yy}{\boldsymbol{y}}
+- \newcommand{\zz}{\boldsymbol{z}}
+- \newcommand{\XX}{\boldsymbol{X}}
+- \newcommand{\YY}{\boldsymbol{Y}}
+- \newcommand{\ZZ}{\boldsymbol{Z}}
+- \newcommand{\bbeta}{\boldsymbol{\beta}}
+- \newcommand{\bphi}{\boldsymbol{\phi}}
+- \newcommand{\RR}{\darkred{\textsf{R}}}
+- \newcommand{\BB}{\textsf{B}}
+geometry: margin=1.25cm
+urlcolor: magenta
+---
+
+### Exercise: Connect your brain
+
+1. Take a look at basic tools to deal with graphs in R such as the igraph and ggraph packages.
+2. Load the pre–processed data matrix $X$ contained in the file hw2_data.RData. The resulting object named $t$, $mts$ is a (240 × 81) numerical matrix. The 81 columns are related to different Brodmann cortical areas labeled with an integer plus a prefix $L$ or $R$ depending on the hemisphere they belong. The rows instead are the observation times (again, here we will drop the temporal dependency). Notice that, for each cortical area, the time series we are working on is obtained by averaging those associated to voxels belonging to the same Brodmann area.
+3. With this data, consider any association measure you want (but partial correlation, see the last point), and implement the bootstrap procedure described in the box above entitled "simultaneous bootstrapped CI’s for a generic association measure $\rho$".
+4. Graphically represent the estimated graph but try to:
+  - visualize its dynamic as $\epsilon$ varies
+  - visualize the strengh of the dependency adopting a suitable color-scale for the edges of the graph. Draw some conclusion: what are the areas that show the highest/lowest degree of connectivity?
+5. Repeat the analysis using this time the linear partial correlation coefficient as implemented in package SIN. Compare the results... even better if “visually”...
+
+### Solution
+
+```{r}
+# Loading data
+load("./hw2_data.RData")
+
+ncol(mts)
+nrow(mts)
+
+# Brodmann mapping: https://brmlab.cz/project/brain_hacking/broadmannarea
+colnames(mts)
+```
+
+```{r}
+# show data
+#View(mts) <-- use this command to explore data using RStudio
+#summary(mts) <-- TLDR
+hist(mts, prob = T, col = "pink", border = "white", main = "MTS", xlab = "mts values", breaks = 25)
+lines(density(mts, na.rm = T), co = "purple", lwd = 4)
+```
+
+```{r}
+plot(ecdf(mts), xlab = "mts data", main = "empirical CDF", cex = .25)
+```
+
+```{r}
+# Evaluate the correlation between vars
+mts_cor <- cor(mts)
+
+# take a "snapshot" of it
+require(corrplot)
+corrplot(mts_cor, diag = FALSE, order = "FPC", tl.pos = "td", tl.cex = 0.4, method = "color", type = "upper")
+```
+
+```{r}
+# We'll consider Pearson's correlation
+# X \bot Y => rho(X, Y) = 0 [https://en.wikipedia.org/wiki/Correlation_and_dependence]
+
+# Then, we implement the simultaneous bootstrapped CI's for a generic association metric rho.
+# Of course, considering we're going to work with Pearson's correlation
+N <- nrow(mts)
+D <- ncol(mts)
+B <- 20000 # no. of bootstrap iterations 
+dB <- c() # delta_B
+Xstar <- matrix(NA, nrow = N, ncol = D) # todo: transform this into a df to have labels
+
+#renaming to match naming convention
+X <- mts
+Rhat <- mts_cor
+
+# run bootstrap
+for (b in 1:B) {
+  idx <- sample(1:N, replace = TRUE)
+  
+  # generating sample taken from index "idx"
+  for (i in 1:length(X[,1])) {
+    Xstar[i,] <- X[idx[i],]
+  }
+  
+  # Correlations from new data
+  Rstar_b <- cor(Xstar)
+  dB[b] <- sqrt(N) * max(abs(Rstar_b - Rhat))
+}
+dB
+plot(ecdf(dB))
+```
+
+```{r}
+# plotting bootstrapped data
+corrplot(Rstar, diag = FALSE, order = "FPC", tl.pos = "td", tl.cex = 0.4, method = "color", type = "upper")
+```
+
+```{r}
+plot(ecdf(X), cex = .25,
+     col = "red", xlab = "MTS", cex.main = .95,
+     main = "Empirical CDF + Bootstrap replicates")
+par(new=TRUE)
+plot(ecdf(dB), cex = .25, col = "green", axes=FALSE, frame.plot=T, main = NULL, xlab = NULL)
+```
+```{r}
+# Confidence Intervals
+# For what concerns 0.95 CIs
+# https://math.stackexchange.com/questions/1480904/given-a-95-confidence-interval-why-are-we-using-1-96-and-not-1-64
+# ...
+```
+
+
+```{r}
+# In order to create an adjacency matrix we need to get the p-values
+# from the correlation matrix: ex. out <- cor.test( FIELD_1, FIELD_2, conf.level = 1 - alpha ); pval <- out$p.value (or use mtest)
+# ...
+```
+
+```{r}
+# Decision rule: reject H0 if the (unadjusted) p-value is smaller than <alpha>
+adj_mat1 <-  matrix(0, nrow = nrow(cc), ncol = ncol(cc), dimnames = dimnames(cc))
+adj_mat1[ which(pval_mat < alpha) ] <- 1
+adj_mat1
+
+# Applying Bonferroni for multiplicity asjustment
+t_bonf   <- alpha/length(pval)
+adj_mat2 <-  matrix(0, nrow = nrow(cc), ncol = ncol(cc), dimnames = dimnames(cc))
+adj_mat2[ which(pval_mat < t_bonf) ] <- 1
+adj_mat2
+```
+
+```{r}
+# Building an association graph taking an adjacency matrix as input
+# This is not adjusted (multiplicity)
+require(igraph, quietly = TRUE)
+G1 <- graph_from_adjacency_matrix(adj_mat1, mode = "undirected")
+plot(G1, vertex.size = 75, vertex.color = rgb(0,0,1,.2),
+     label.col = "black", curved = TRUE, 
+     main = "Marginal Correlation Graph", 
+     sub = "(No multiplicity adjustment)")
+
+# This has been treated with Bonferroni correction
+G2 <- graph_from_adjacency_matrix(adj_mat2, mode = "undirected")
+plot(G2, vertex.size = 75, vertex.color = rgb(0,0,1,.2),
+     label.col = "black", curved = TRUE, 
+     main = "Marginal Correlation Graph", 
+     sub = "(Bonferroni adjustment)")
+```
+
+```{r}
+# Output the estimated graph paying more attention to the strength of the denpendancies (color-based system)
+```
+
+```{r}
+# For the sake of the experiment, we're going to retake the same procedure applying the linear partial correlation coefficient
+library(SIN)
+```
+
